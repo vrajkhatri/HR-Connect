@@ -193,4 +193,4 @@ PostgreSQL
 
 Bootstrap
 
-Made with ❤️ by [Vraj Khatri]
+Made By [Vraj Khatri]
