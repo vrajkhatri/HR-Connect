@@ -1,0 +1,205 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                Int                @id @default(autoincrement())
+  name              String
+  email             String             @unique
+  password          String
+  role              Role               @default(EMPLOYEE)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  
+  employeeProfile   EmployeeProfile?
+  notifications     Notification[]
+  approvedLeaves    LeaveRequest[]     @relation("ApprovedLeaves")
+  auditLogs         AuditLog[]         @relation("AuditLogs")
+  adjustedLeaves    LeaveRequest[]     @relation("ManualAdjustments")
+}
+
+model EmployeeProfile {
+  id                Int                @id @default(autoincrement())
+  userId            Int                @unique
+  employeeCode      String             @unique
+  departmentId      Int?
+  joiningDate       DateTime?
+  designation       String?
+  phone             String?
+  address           String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  
+  user              User               @relation(fields: [userId], references: [id])
+  department        Department?        @relation(fields: [departmentId], references: [id])
+  leaveBalances     LeaveBalance[]
+  leaveRequests     LeaveRequest[]
+  leaveBalanceHistory LeaveBalanceHistory[]
+}
+
+model Department {
+  id                Int                @id @default(autoincrement())
+  name              String             @unique
+  description       String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  
+  employees         EmployeeProfile[]
+}
+
+model LeaveType {
+  id                Int                @id @default(autoincrement())
+  name              String             @unique
+  description       String?
+  color             String             @default("#6c757d")
+  maxDays           Float?
+  monthlyCredit     Float              @default(0)
+  carryForward      Boolean            @default(true)
+  carryForwardLimit Float?
+  isCompensatory    Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  
+  leaveBalances     LeaveBalance[]
+  leaveRequests     LeaveRequest[]
+  leaveBalanceHistory LeaveBalanceHistory[]
+}
+
+model LeaveBalance {
+  id                Int                @id @default(autoincrement())
+  employeeId        Int
+  leaveTypeId       Int
+  totalDays         Float              @default(0)
+  usedDays          Float              @default(0)
+  year              Int                @default(2026)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  
+  employee          EmployeeProfile    @relation(fields: [employeeId], references: [id])
+  leaveType         LeaveType          @relation(fields: [leaveTypeId], references: [id])
+  
+  @@unique([employeeId, leaveTypeId, year])
+}
+
+model LeaveBalanceHistory {
+  id                 Int      @id @default(autoincrement())
+  employeeId         Int
+  leaveTypeId        Int
+  year               Int
+  month              Int
+  openingBalance     Float    @default(0)
+  monthlyCredit      Float    @default(0)
+  leavesTaken        Float    @default(0)
+  manualAdjustment   Float    @default(0)
+  closingBalance     Float    @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  employee           EmployeeProfile @relation(fields: [employeeId], references: [id])
+  leaveType          LeaveType       @relation(fields: [leaveTypeId], references: [id])
+
+  @@unique([employeeId, leaveTypeId, year, month])
+  @@index([employeeId, year, month])
+}
+
+model LeaveRequest {
+  id                Int                @id @default(autoincrement())
+  employeeId        Int
+  leaveTypeId       Int
+  startDate         DateTime
+  endDate           DateTime
+  dayType           DayType            @default(FULL_DAY)
+  daysCount         Float
+  reason            String?
+  status            LeaveStatus        @default(PENDING)
+  appliedAt         DateTime           @default(now())
+  approvedAt        DateTime?
+  approvedById      Int?
+  adminNote         String?
+  rejectedReason    String?
+  isManual          Boolean            @default(false)
+  adjustmentReason  String?
+  adjustedBy        Int?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  
+  employee          EmployeeProfile    @relation(fields: [employeeId], references: [id])
+  leaveType         LeaveType          @relation(fields: [leaveTypeId], references: [id])
+  approvedBy        User?              @relation("ApprovedLeaves", fields: [approvedById], references: [id])
+  adjustedByUser    User?              @relation("ManualAdjustments", fields: [adjustedBy], references: [id])
+  notifications     Notification[]     @relation("LeaveNotifications")
+  auditLogs         AuditLog[]
+}
+
+enum DayType {
+  FULL_DAY
+  FIRST_HALF
+  SECOND_HALF
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum Role {
+  EMPLOYEE
+  HR
+  ADMIN
+}
+
+model Notification {
+  id                Int                @id @default(autoincrement())
+  userId            Int
+  leaveRequestId    Int?
+  title             String
+  message           String
+  read              Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  
+  user              User               @relation(fields: [userId], references: [id])
+  leaveRequest      LeaveRequest?      @relation("LeaveNotifications", fields: [leaveRequestId], references: [id])
+}
+
+model AuditLog {
+  id                Int                @id @default(autoincrement())
+  leaveRequestId    Int
+  approvedById      Int
+  action            String
+  remarks           String?
+  createdAt         DateTime           @default(now())
+  
+  leaveRequest      LeaveRequest       @relation(fields: [leaveRequestId], references: [id])
+  approvedBy        User               @relation("AuditLogs", fields: [approvedById], references: [id])
+}
+
+model PasswordReset {
+  id            Int      @id @default(autoincrement())
+  email         String
+  token         String   @unique
+  expiresAt     DateTime
+  used          Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model OTP {
+  id            Int      @id @default(autoincrement())
+  email         String
+  otp           String
+  purpose       String   @default("PASSWORD_RESET")
+  expiresAt     DateTime
+  used          Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([email])
+  @@index([otp])
+}
